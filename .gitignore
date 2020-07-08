@@ -1,0 +1,13 @@
+# 忽略 MacOS 下的 .DS_Store 文件
+*.DS_Store
+
+# 忽略 node_modules
+node_modules
+
+# 忽略 babel 编译后生成的 js
+/lib/
+
+
+# yarn 相关
+yarn-error.log
+yarn.lock

@@ -1,0 +1,8 @@
+# 忽略 src 源码
+/src/
+
+# 忽略 demo
+/demo/
+
+# 忽略 test
+/test/
