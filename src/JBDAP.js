@@ -143,6 +143,10 @@ async function manipulate(conn,json,configs) {
             cacher: configs.cacher,
             // 服务端函数调度器
             dispatcher: configs.dispatcher,
+            // 数据预处理
+            decorator: configs.decorator,
+            // 自动处理 createdAt 和 updatedAt 字段
+            autoTimestamp: _.isBoolean(configs.autoTimestamp) ? configs.autoTimestamp : true,
             // 是否打印 sql 语句
             printSql: _.isBoolean(configs.printSql) ? configs.printSql : true,
             // 原始命令集
@@ -476,6 +480,7 @@ async function handleCmd(workshop,cmd,isTop,level,parent) {
         switch (cmd.type) {
             case 'entity':
             case 'list':
+            case 'distinct':
             case 'values':
                 // 查询类指令
                 result = await queryCmd(workshop,cmd,isTop,level,parent)
@@ -647,7 +652,7 @@ async function queryCmd(workshop,cmd,isTop,level,parent) {
                 // 从数组中取出单个 entity
                 if (cmd.type === 'entity') result = reference.getObjFromList(rawData,cmd.query,rawFields,root,parent,lang)
                 // 从数组中取出 list
-                if (cmd.type === 'list') result = reference.getListFromList(rawData,cmd.query,rawFields,root,parent,lang)
+                if (cmd.type === 'list' || cmd.type === 'distinct') result = reference.getListFromList(rawData,cmd.query,rawFields,root,parent,lang)
                 // 对数组进行计算得到 values
                 if (cmd.type === 'values') result = reference.getValuesFromList(rawData,valuesFields,lang)
             }
@@ -688,6 +693,11 @@ async function queryCmd(workshop,cmd,isTop,level,parent) {
                     if (rawFields === '*') query = query.select()
                     else query = query.column(rawFields).select()
                 }
+                // distinct 查询
+                if (cmd.type === 'distinct') {
+                    if (rawFields === '*') query = query.distinct()
+                    else query = query.distinct(rawFields)
+                }
                 // 3、是否有定义查询规则
                 if (_.isPlainObject(cmd.query)) {
                     // 3.1 解析 where 条件
@@ -709,6 +719,10 @@ async function queryCmd(workshop,cmd,isTop,level,parent) {
                         // 如果是 entity 查询则只取第一条数据即可
                         if (cmd.type === 'entity') query = query.limit(1)
                     }
+                }
+                else {
+                    // 如果是 entity 查询则只取第一条数据即可
+                    if (cmd.type === 'entity') query = query.limit(1)
                 }
                 // 4、执行查询
                 // 只用 sql 函数就可以实现的 values 查询
@@ -734,6 +748,22 @@ async function queryCmd(workshop,cmd,isTop,level,parent) {
                 else {
                     if (workshop.printSql === true) console.log('sql:',query.toString())
                     result = await query
+                }
+                // 将 Date 类型转成当前时区的字符串格式
+                if (_.isArray(result)) {
+                    for (let i=0; i<result.length; i++) {
+                        let row = result[i]
+                        let keys = Object.keys(row)
+                        for (let j=0; j<keys.length; j++) {
+                            if (_.isDate(row[keys[j]])) row[keys[j]] = row[keys[j]].fdtString()
+                        }
+                    }
+                }
+                else {
+                    let keys = Object.keys(result)
+                    for (let j=0; j<keys.length; j++) {
+                        if (_.isDate(result[keys[j]])) result[keys[j]] = result[keys[j]].fdtString()
+                    }
                 }
                 // 对查询结果（TextRow 类型）进行处理（转成 PlainObject）
                 result = JSON.parse(JSON.stringify(result))
@@ -817,7 +847,7 @@ async function queryCmd(workshop,cmd,isTop,level,parent) {
             else if (_.isArray(result)) result = result[0]
             if (isTop) root[cmd.name].data = result
         }
-        if (cmd.type === 'list') {
+        if (cmd.type === 'list' || cmd.type === 'distinct') {
             if (_.isArray(result) && result.length === 0) result = null
             if (isTop) root[cmd.name].data = result
         }
@@ -901,6 +931,7 @@ function getSubConditionFunc(obj,type,workshop,parent) {
             else {
                 // 先解析
                 let comparision = parser.parseComparision('query',key,value,lang)
+                // 如果是字符串需要考虑表达式转实值的情况
                 if (_.isString(comparision.right)) {
                     comparision.right = calculator.tag2value(comparision.right,root,parent,null,lang)
                     if (validator.hasSqlInjection(comparision.right)) JS.throwError('SqlInjectionError',null,null,[
@@ -908,6 +939,8 @@ function getSubConditionFunc(obj,type,workshop,parent) {
                         ['en-us', `Sql Injection characters found in 'where' conditions`]
                     ],lang)
                 }
+                // 如果是 Date 类型则将它转成无关时区的字符串类型
+                if (_.isDate(comparision.right)) comparision.right = comparision.right.fdtString()
                 // 后拼组查询条件
                 let left = comparision.left, right = comparision.right, operator = comparision.operator
                 switch (operator) {
@@ -1333,13 +1366,19 @@ async function executeCmd(workshop,cmd,isTop,level,parent) {
                 if (_.isPlainObject(cmd.data)) cmd.data = [cmd.data]
                 for (let i=0; i<cmd.data.length; i++) {
                     let item = cmd.data[i]
-                    // Mysql 时间格式
-                    // 自动填充 createdAt 和 updatedAt（以可读当地时间字符串形式）
-                    if (cmd.type === 'create' && !item.createdAt) {
-                        item.createdAt = (new Date()).dtString()
+                    // 自动时间戳功能
+                    if (workshop.autoTimestamp) {
+                        // 自动填充 createdAt 和 updatedAt（以可读当地时间字符串形式）
+                        if (cmd.type === 'create' && !item.createdAt) {
+                            item.createdAt = (new Date()).fdtString()
+                        }
+                        if (!item.updatedAt) {
+                            item.updatedAt = (new Date()).fdtString()
+                        }
                     }
-                    if (!item.updatedAt) {
-                        item.updatedAt = (new Date()).dtString()
+                    // 数据机器人
+                    if (_.isFunction(workshop.decorator)) {
+                        item = await workshop.decorator(cmd,item)
                     }
                     // 执行内置函数，防 xss 处理
                     let keys = Object.keys(item)
@@ -1347,12 +1386,12 @@ async function executeCmd(workshop,cmd,isTop,level,parent) {
                         let key = keys[j]
                         // Mysql 时间格式处理为可读字符串
                         if (_.isDate(item[key])) {
-                            item[key] = item[key].dtString()
+                            item[key] = item[key].fdtString()
                         }
                         if (_.isString(item[key])) {
                             switch (item[key]) {
                                 case 'JBDAP.mysql.now()': {
-                                    item[key] = (new Date()).dtString()
+                                    item[key] = (new Date()).fdtString()
                                     break
                                 }
                                 case 'JBDAP.fn.timestamp()': {
@@ -1441,7 +1480,13 @@ async function executeCmd(workshop,cmd,isTop,level,parent) {
     catch (err) {
         // 对 knex 内部返回的错误进行处理
         if (typeof err === 'object' && err.errno && err.originalStack) {
-            err = new Error(`${err.originalStack.replace('Error: ','')}`)
+            // 将 knex 返回的错误信息包装成 NiceError
+            err = new JS.NiceError(err.sqlMessage.replace('SqlError:',''),{
+                name: err.code,
+                cause: null,
+                info: {},
+                stack: err.originalStack
+            })
         }
         JS.throwError('DBExecError',err,null,[
             ['zh-cn', `操作数据出错`],

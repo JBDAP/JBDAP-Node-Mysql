@@ -44,3 +44,21 @@ module.exports.complex = {
         }
     ]
 }
+
+module.exports.distinct = {
+    commands: [
+        {
+            name: 'activeUserIds',
+            type: 'distinct',
+            target: 'Blog',
+            query: {
+                where: {
+                    'views#gte': 500,
+                    'hearts#gte': 50
+                }
+            },
+            fields: 'userId'
+        }
+    ]
+}
+

@@ -21,6 +21,11 @@ if (!global.$JBDAP_ENV) global.$JBDAP_ENV = {
 let JE = global.$JBDAP_ENV
 
 // 全局抛错函数
+JS.newError = function (name,cause,info,dict,lang) {
+    // 默认语言
+    if (lang == undefined) lang = JE.i18nLang
+    return JS.newErrorI18N(name,cause,info,dict,lang)
+}
 JS.throwError = function (name,cause,info,dict,lang) {
     // 默认语言
     if (lang == undefined) lang = JE.i18nLang

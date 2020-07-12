@@ -20,10 +20,10 @@ test('测试事务支持及日志和错误跟踪', async () => {
     // 成功例子
     let json = require('./json/transaction.js').success
     let res = await JBDAP.manipulate(conn,json,config)
-    console.log(res)
+    // console.log(res)
     json = require('./json/transaction.js').check
     res = await JBDAP.manipulate(conn,json,config)
-    console.log(res)
+    // console.log(res)
     expect(res.data.countBlogs.total).toEqual(0)
     // 失败例子
     json = require('./json/transaction.js').beforeFail

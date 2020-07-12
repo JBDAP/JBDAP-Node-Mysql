@@ -15,6 +15,16 @@ afterAll(async () => {
     await db.emptyDB(conn)
 })
 
+test('测试 distinct 查询', async () => {
+    // 简单查询
+    let json = require('./json/where.js').distinct
+    let res = await JBDAP.manipulate(conn,json,config)
+    // console.log(JSON.stringify(res,null,4))
+    let query = await conn.from('Blog').distinct('userId').where('views','>=',500).andWhere('hearts','>=',50)
+    // console.log(query)
+    expect(res.data.activeUserIds.length).toEqual(query.length)
+})
+
 test('测试 where 查询', async () => {
     expect.assertions(4)
     // 简单查询

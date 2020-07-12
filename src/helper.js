@@ -13,9 +13,10 @@ const ajv = new Ajv({ allErrors: true })
  * 创建单个数据表
  * @param {object} conn 数据库连接
  * @param {object} schema 单个数据表的定义文件
+ * @param {boolean} timestamps 是否自动添加 createdAt 和 updatedAt 字段
  * @param {string} lang 提示信息所用语言
  */
-async function createTable(conn,schema,lang) {
+async function createTable(conn,schema,timestamps,lang) {
     if (_.isUndefined(lang)) lang = JE.i18nLang
     // 合法性检查
     checkTableSchema(schema,lang)
@@ -33,8 +34,16 @@ async function createTable(conn,schema,lang) {
             // 创建字段
             for (let i=0; i<schema.columns.length; i++) {
                 let column = schema.columns[i]
-                let length = (column.type === 'string' && _.isInteger(column.length)) ? ',' + column.length : ''
+                let length = ((column.type === 'string' || column.type === 'text' || column.type === 'binary') && _.isInteger(column.length)) ? ',' + column.length : ''
                 let type = `.${column.type}('${column.name}'${length})`
+                let decimal = ''
+                if (column.type === 'float' || column.type === 'decimal') {
+                    let precision = _.isInteger(column.precision) ? column.precision : 8
+                    let scale = _.isInteger(column.scale) ? column.scale : 2
+                    decimal = `,${precision},${scale}`
+                    type = `.${column.type}('${column.name}'${decimal})`
+                }
+                if (column.type === 'enum') type = `.enu('${column.name}',${JSON.stringify(column.values)})`
                 let primary = column.primary === true ? '.primary()' : ''
                 let notNullable = column.notNullable === true ? '.notNullable()' : ''
                 let defaultTo = !_.isUndefined(column.defaultTo) ? `.defaultTo(${JSON.stringify(column.defaultTo)})` : ''
@@ -44,9 +53,12 @@ async function createTable(conn,schema,lang) {
                 // console.log(str)
                 eval(str)
             }
-            // 检查是否需要自动创建 createdAt 和 updatedAt
-            if (_.findIndex(schema.columns, { name: 'createdAt' }) < 0) table.datetime('createdAt').comment('数据创建时间')
-            if (_.findIndex(schema.columns, { name: 'updatedAt' }) < 0) table.datetime('updatedAt').comment('最后更新时间')
+            timestamps = _.isBoolean(timestamps) ? timestamps : true
+            if (timestamps === true) {
+                // 检查是否需要自动创建 createdAt 和 updatedAt
+                if (_.findIndex(schema.columns, { name: 'createdAt' }) < 0) table.datetime('createdAt').comment('数据创建时间')
+                if (_.findIndex(schema.columns, { name: 'updatedAt' }) < 0) table.datetime('updatedAt').comment('最后更新时间')
+            }
             // 创建唯一键
             if (schema.uniques) {
                 for (let i=0; i<schema.uniques.length; i++) {
@@ -116,7 +128,7 @@ function checkTableSchema(json,lang) {
                         primary: { type: 'boolean' },
                         type: {
                             type: 'string',
-                            enum: [ 'increments', 'string', 'integer', 'float', 'decimal', 'boolean', 'datetime', 'text' ]
+                            enum: [ 'increments', 'bigIncrements', 'string', 'integer', 'bigInteger','float', 'decimal', 'boolean', 'datetime', 'text', 'enum', 'binary' ]
                         },
                         length: {
                             type: 'integer',
@@ -124,7 +136,17 @@ function checkTableSchema(json,lang) {
                         },
                         unsigned: { type: 'boolean' },
                         notNullable: { type: 'boolean' },
-                        defaultTo: {}
+                        defaultTo: {},
+                        precision: { type: 'integer' },
+                        scale: { type: 'integer' },
+                        values: {
+                            type: 'array',
+                            minItems: 1,
+                            uniqueItems: true,
+                            items: {
+                                type: 'string'
+                            }
+                        }
                     },
                     required: [ 'name', 'type' ],
                     additionalProperties: false
