@@ -1,6 +1,6 @@
 {
   "name": "jbdap-mysql",
-  "version": "0.1.5",
+  "version": "0.1.8",
   "description": "The official JBDAP implementation for nodejs work with Mysql/MariaDB.",
   "main": "index.js",
   "scripts": {

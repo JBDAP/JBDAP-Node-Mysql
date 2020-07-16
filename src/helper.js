@@ -30,7 +30,7 @@ async function createTable(conn,schema,timestamps,lang) {
     return conn.schema.createTable(schema.name, (table) => {
         try {
             // 表格备注
-            if (_.isString(schema.comment) && schema.comment !== '') table.comment(schema.comment)
+            if (_.isString(schema.comment) && schema.comment !== '') table.comment(schema.comment + ((_.isString(schema.version) && schema.version !== '') ? ' V' + schema.version : ''))
             // 创建字段
             for (let i=0; i<schema.columns.length; i++) {
                 let column = schema.columns[i]
@@ -47,8 +47,8 @@ async function createTable(conn,schema,timestamps,lang) {
                 let primary = column.primary === true ? '.primary()' : ''
                 let notNullable = column.notNullable === true ? '.notNullable()' : ''
                 let defaultTo = !_.isUndefined(column.defaultTo) ? `.defaultTo(${JSON.stringify(column.defaultTo)})` : ''
-                let unsigned = ((column.type === 'integer' || column.type === 'float' || column.type === 'decimal') && column.unsigned === true) ? '.unsigned()' : ''
-                let comment = (_.isString(column.comment) && column.comment !== '') ? `.comment('${'Current Version ' + column.comment + ' : ' + column.comment}')` : ''
+                let unsigned = ((column.type === 'integer' || column.type === 'bigInteger'|| column.type === 'float' || column.type === 'decimal') && column.unsigned === true) ? '.unsigned()' : ''
+                let comment = (_.isString(column.comment) && column.comment !== '') ? `.comment('${column.comment}')` : ''
                 let str = `table${type}${unsigned}${notNullable}${defaultTo}${primary}${comment}`
                 // console.log(str)
                 eval(str)
