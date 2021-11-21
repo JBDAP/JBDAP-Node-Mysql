@@ -34,7 +34,7 @@ async function createTable(conn,schema,timestamps,lang) {
             // 创建字段
             for (let i=0; i<schema.columns.length; i++) {
                 let column = schema.columns[i]
-                let length = ((column.type === 'string' || column.type === 'text' || column.type === 'binary') && _.isInteger(column.length)) ? ',' + column.length : ''
+                let length = ((column.type === 'string' || column.type === 'binary') && _.isInteger(column.length)) ? ',' + column.length : ''
                 let type = `.${column.type}('${column.name}'${length})`
                 let decimal = ''
                 if (column.type === 'float' || column.type === 'decimal') {
@@ -44,6 +44,8 @@ async function createTable(conn,schema,timestamps,lang) {
                     type = `.${column.type}('${column.name}'${decimal})`
                 }
                 if (column.type === 'enum') type = `.enu('${column.name}',${JSON.stringify(column.values)})`
+                if (column.type === 'text') type = `.text('${column.name}','text')`
+                if (column.type === 'bigText') type = `.text('${column.name}','mediumtext')`
                 let primary = column.primary === true ? '.primary()' : ''
                 let notNullable = column.notNullable === true ? '.notNullable()' : ''
                 let defaultTo = !_.isUndefined(column.defaultTo) ? `.defaultTo(${JSON.stringify(column.defaultTo)})` : ''
